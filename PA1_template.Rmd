@@ -1,25 +1,103 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+output: html_document
+keep_md: true
 ---
+
+We analyse data from a personal activity monitoring device [1]. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during
+the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+[1] https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip [Accessed on 8 April 2015]
 
 
 ## Loading and preprocessing the data
 
+The following code loads the data into the local variable activity. We also transform the date column into the POSIXct time format using the lubridate package.
+```{r}
+activity <- read.csv("activity.csv", header = TRUE)
+library(lubridate)
+activity$date <- ymd(activity$date)
+```
 
+Addittionally we set the path for the figures in this plot using
+```{r}
+knitr::opts_chunk$set(fig.path='figures/', warning=FALSE, message=FALSE)
+```
 
-## What is mean total number of steps taken per day?
+## Mean total number of steps taken per day
 
+Here we ignore the missing values in the dataset by using the option na.rm=TRUE in R. The total number of steps for each day is shown in the histogram below.
+```{r}
+suppressMessages(library(dplyr))
+total_per_day <- summarise(group_by(activity, date), total=sum(steps, na.rm=TRUE))
+hist(total_per_day$total, breaks=10, xlab="total steps", main="Total steps per day")
+```
 
+The mean and median total number of steps taken per day are listed below.
+```{r}
+mean(total_per_day$total,na.rm=TRUE)    # mean value
+median(total_per_day$total,na.rm=TRUE)  # median value
+```
 
-## What is the average daily activity pattern?
+## Average daily activity pattern
 
+We make a time series plot of the 5-minute intervals (x-axis) and the average number of steps taken, averaged across all days (y-axis). The R code and the plot is given below:
+```{r}
+av_time_series <- summarise(group_by(activity, interval), mean=mean(steps, na.rm=TRUE))
+plot(av_time_series$interval, av_time_series$mean, type='l', xlab="interval", ylab="average steps", main="Average daily activity pattern")
+```
+
+On average across all the days in the dataset, the 5-minute interval with the maximum number of steps is
+```{r}
+av_time_series[which(av_time_series$mean == max(av_time_series$mean)),]
+```
 
 
 ## Imputing missing values
 
+There are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data. We check various aspect to understand the influence of the NA values.
+
+The total number of missing values in the dataset (i.e. the total number of rows with NAs) is
+```{r}
+sum(!complete.cases(activity))
+```
+All the missing values occur in the steps column. In total the missing data accounts to about 13% of the data.
+
+For a comparison we fill the missing values in the dataset with the mean for that 5-minute interval. The code below creates a new dataset activity_mod that is equal to the original dataset but with the missing data filled in.
+```{r}
+# add column with average total steps for each interval
+activity_mod <- activity %>% group_by(interval) %>% mutate(daily_mean = mean(steps, na.rm=TRUE))
+# replace NA values with average values
+activity_mod <- mutate(activity_mod, steps = ifelse(!is.na(steps), steps, daily_mean))
+```
+
+We now re-evaluate the histogram of the total number of steps taken each day and report the mean and median total number of steps taken per day for the modified data set. 
+```{r}
+total_per_day_mod <- summarise(group_by(activity_mod, date), total=sum(steps, na.rm=TRUE))
+hist(total_per_day_mod$total, breaks=10, xlab="total steps", main="Total steps per day")
+mean(total_per_day_mod$total)   # mean value
+median(total_per_day_mod$total) # median value
+```
+The peak for 0 steps per day in the histogram was clearly caused by the missing values. Also the peak at 10000 steps is now higher because days with completely missing data contribute now to this interval. The total number of steps for each day increases if we replace the missing data. Hence, also the mean and median values have increased. It's an interesting fact that the mean and median value are identical. The median value just corresponds to the avarage daily activity pattern and hence it also includes the days with completely missing data.
+
+## Activity patterns for weekdays and weekends
+
+Here we study the differences in the activity pattern between weekdays and weekends. We use the dataset
+with the filled-in missing values for this part. Using the weekdays() function we add a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+```{r}
+activity_mod <- mutate(activity_mod, day_type = factor(ifelse(weekdays(date)=="Saturday" | weekdays(date)=="Sunday", "weekend", "weekday")))
+```
+
+We make a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+```{r}
+# create time series from modified data
+av_time_series_mod <- summarise(group_by(activity_mod, interval, day_type), mean=mean(steps))
+
+# plot data for weekdays and weekends
+library(lattice)
+xyplot(av_time_series_mod$mean~av_time_series_mod$interval|av_time_series_mod$day_type, type='l', xlab="interval", ylab="average steps", main="Average daily activity pattern", layout=c(1,2))
+```
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+
+
